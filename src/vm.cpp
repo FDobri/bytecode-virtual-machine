@@ -50,5 +50,103 @@ private:
     std::size_t line_ = 1;
 };
 
+class Compiler {
+    struct Call { std::size_t function, instruction, arity; std::string name; };
+    struct Nesting {
+        std::size_t& depth;
+        explicit Nesting(std::size_t& count) : depth(count) {
+            if (++depth > 128) throw Error("syntax nesting exceeds 128 levels");
+        }
+        ~Nesting() { --depth; }
+    };
+public:
+    explicit Compiler(std::string_view source) : lexer_(source), token_(lexer_.next()) {}
+    Program parse() {
+        while (token_.kind != Kind::end) function();
+        for (const auto& call : calls_) {
+            const auto it = functions_.find(call.name);
+            auto& inst = program_.functions[call.function].code[call.instruction];
+            if (it == functions_.end() || program_.functions[it->second].arity != call.arity)
+                throw Error("line " + std::to_string(inst.line) + ": invalid call to " + call.name);
+            inst.arg = static_cast<Word>(it->second);
+        }
+        return std::move(program_);
+    }
+private:
+    [[noreturn]] void error(std::string_view message) const {
+        throw Error("line " + std::to_string(token_.line) + ": " + std::string(message));
+    }
+    Token take() { return std::exchange(token_, lexer_.next()); }
+    bool match(std::string_view text) {
+        if (token_.text != text) return false;
+        take();
+        return true;
+    }
+    void expect(std::string_view text) {
+        if (!match(text)) error("expected " + std::string(text));
+    }
+    std::string identifier() {
+        const auto text = token_.text;
+        if (token_.kind != Kind::id || text == "fn" || text == "let" || text == "if" ||
+            text == "else" || text == "while" || text == "return") error("expected identifier");
+        return std::string(take().text);
+    }
+    Function& current() { return program_.functions.back(); }
+    std::size_t emit(Op op, Word arg, std::size_t line) {
+        auto& code = current().code;
+        code.push_back({op, arg, line});
+        return code.size() - 1;
+    }
+    Word address() { return static_cast<Word>(current().code.size()); }
+    void patch(std::size_t jump) { current().code[jump].arg = address(); }
+    Word declare(const std::string& name) {
+        if (scopes_.back().contains(name)) error("duplicate local");
+        auto slot = static_cast<Word>(current().locals++);
+        scopes_.back().emplace(name, slot);
+        return slot;
+    }
+    Word local(const std::string& name) {
+        for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it)
+            if (auto slot = it->find(name); slot != it->end()) return slot->second;
+        error("unknown local " + name);
+    }
+    void function() {
+        expect("fn");
+        auto name = identifier();
+        if (!functions_.emplace(name, program_.functions.size()).second) error("duplicate function");
+        program_.functions.push_back(Function{std::move(name)});
+        scopes_.emplace_back();
+        expect("(");
+        if (!match(")")) {
+            do { declare(identifier()); ++current().arity; } while (match(","));
+            expect(")");
+        }
+        block();
+        emit(Op::constant, 0, token_.line);
+        emit(Op::ret, 0, token_.line);
+        scopes_.pop_back();
+    }
+    void block() {
+        Nesting guard(depth_);
+        expect("{");
+        scopes_.emplace_back();
+        while (!match("}")) statement();
+        scopes_.pop_back();
+    }
+    }
+    Lexer lexer_;
+    Token token_;
+    Program program_;
+    std::unordered_map<std::string, std::size_t> functions_;
+    std::vector<std::unordered_map<std::string, Word>> scopes_;
+    std::vector<Call> calls_;
+    std::size_t depth_{};
+};
+
+}
+
+Program compile(std::string_view source) {
+    if (source.size() > 1024 * 1024) throw Error("source exceeds 1 MiB");
+    return Compiler(source).parse();
 }
 }
