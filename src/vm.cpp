@@ -133,6 +133,43 @@ private:
         while (!match("}")) statement();
         scopes_.pop_back();
     }
+    void statement() {
+        const auto line = token_.line;
+        if (match("let")) {
+            const auto name = identifier();
+            expect("=");
+            expression();
+            emit(Op::store, declare(name), line);
+        } else if (match("return")) {
+            expression();
+            emit(Op::ret, 0, line);
+        } else if (match("if")) {
+            expression();
+            const auto branch = emit(Op::branch, 0, line);
+            block();
+            if (match("else")) {
+                const auto jump = emit(Op::jump, 0, line);
+                patch(branch);
+                block();
+                patch(jump);
+            } else patch(branch);
+            return;
+        } else if (match("while")) {
+            const auto start = address();
+            expression();
+            const auto branch = emit(Op::branch, 0, line);
+            block();
+            emit(Op::jump, start, line);
+            patch(branch);
+            return;
+        } else {
+            const auto slot = local(identifier());
+            expect("=");
+            expression();
+            emit(Op::store, slot, line);
+        }
+        expect(";");
+    }
     }
     Lexer lexer_;
     Token token_;
