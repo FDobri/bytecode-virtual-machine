@@ -170,6 +170,53 @@ private:
         }
         expect(";");
     }
+    static int precedence(std::string_view op) {
+        if (op == "==") return 1;
+        if (op == "<") return 2;
+        if (op == "+" || op == "-") return 3;
+        if (op == "*" || op == "/") return 4;
+        return 0;
+    }
+    static Op binary(std::string_view op) {
+        if (op == "==") return Op::eq;
+        if (op == "<") return Op::lt;
+        if (op == "+") return Op::add;
+        if (op == "-") return Op::sub;
+        if (op == "*") return Op::mul;
+        return Op::div;
+    }
+    void expression(int minimum = 1) {
+        Nesting guard(depth_);
+        const auto line = token_.line;
+        if (match("-")) {
+            expression(5);
+            emit(Op::neg, 0, line);
+        } else if (match("(")) {
+            expression();
+            expect(")");
+        } else if (token_.kind == Kind::number) {
+            auto number = take().text;
+            Word value{};
+            if (std::from_chars(number.data(), number.data() + number.size(), value).ec != std::errc{})
+                error("integer literal out of range");
+            emit(Op::constant, value, line);
+        } else {
+            auto name = identifier();
+            if (match("(")) {
+                std::size_t args = 0;
+                if (!match(")")) {
+                    do { expression(); ++args; } while (match(","));
+                    expect(")");
+                }
+                const auto index = emit(Op::call, 0, line);
+                calls_.push_back({program_.functions.size() - 1, index, args, std::move(name)});
+            } else emit(Op::load, local(name), line);
+        }
+        while (precedence(token_.text) >= minimum) {
+            const auto op = take();
+            expression(precedence(op.text) + 1);
+            emit(binary(op.text), 0, op.line);
+        }
     }
     Lexer lexer_;
     Token token_;
