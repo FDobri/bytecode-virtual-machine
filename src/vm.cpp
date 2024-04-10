@@ -227,10 +227,33 @@ private:
     std::size_t depth_{};
 };
 
+constexpr std::string_view name(Op op) {
+    constexpr std::string_view names[] = {"const", "load", "store", "add", "sub", "mul", "div",
+        "neg", "lt", "eq", "jump", "branch_if_zero", "call", "return"};
+    return names[static_cast<std::size_t>(op)];
+}
+void print(const Instruction& inst, std::ostream& out) {
+    out << name(inst.op);
+    if (inst.op == Op::constant || inst.op == Op::load || inst.op == Op::store ||
+        inst.op == Op::jump || inst.op == Op::branch || inst.op == Op::call)
+        out << ' ' << inst.arg;
+    out << "  [line " << inst.line << "]\n";
+}
 }
 
 Program compile(std::string_view source) {
     if (source.size() > 1024 * 1024) throw Error("source exceeds 1 MiB");
     return Compiler(source).parse();
 }
+void disassemble(const Program& program, std::ostream& out) {
+    for (std::size_t fn = 0; fn < program.functions.size(); ++fn) {
+        const auto& function = program.functions[fn];
+        out << "fn " << fn << ' ' << function.name << '/' << function.arity << '\n';
+        for (std::size_t ip = 0; ip < function.code.size(); ++ip) {
+            out << "  " << ip << "  ";
+            print(function.code[ip], out);
+        }
+    }
+}
+
 }
