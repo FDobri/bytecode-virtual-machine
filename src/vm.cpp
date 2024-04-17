@@ -256,4 +256,16 @@ void disassemble(const Program& program, std::ostream& out) {
     }
 }
 
+Machine::Machine(Program program, std::size_t fuel) : program_(std::move(program)), fuel_(fuel) {
+    const auto& list = program_.functions;
+    auto it = std::find_if(list.begin(), list.end(), [](const auto& fn) { return fn.name == "main"; });
+    if (it == list.end() || it->arity) throw Error("expected fn main() as the entry point");
+    frames_.push_back({static_cast<std::size_t>(it - list.begin()), 0, 0, std::vector<Word>(it->locals)});
+}
+Word Machine::pop() {
+    if (stack_.size() <= frames_.back().base) throw Error("empty operand stack");
+    auto value = stack_.back();
+    stack_.pop_back();
+    return value;
+}
 }
