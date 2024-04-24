@@ -268,4 +268,61 @@ Word Machine::pop() {
     stack_.pop_back();
     return value;
 }
+void Machine::step() {
+    if (done()) return;
+    if (!fuel_) throw Error("instruction budget exhausted");
+    --fuel_;
+    auto& frame = frames_.back();
+    const auto& code = program_.functions.at(frame.function).code;
+    const auto inst = code.at(frame.ip++);
+    const auto arg = static_cast<std::size_t>(inst.arg);
+    switch (inst.op) {
+    case Op::constant: stack_.push_back(inst.arg); return;
+    case Op::load: stack_.push_back(frame.locals.at(arg)); return;
+    case Op::store: frame.locals.at(arg) = pop(); return;
+    case Op::jump: frame.ip = arg; return;
+    case Op::branch: if (!pop()) frame.ip = arg; return;
+    case Op::neg: stack_.push_back(std::bit_cast<Word>(std::uint64_t{0} - std::uint64_t(pop()))); return;
+    case Op::call: {
+        const auto& fn = program_.functions.at(arg);
+        if (frames_.size() >= 256 || stack_.size() - frame.base < fn.arity)
+            throw Error("call exceeds depth or operand limits");
+        const auto base = stack_.size() - fn.arity;
+        std::vector<Word> locals(fn.locals);
+        std::copy(stack_.begin() + base, stack_.end(), locals.begin());
+        stack_.resize(base);
+        frames_.push_back({arg, 0, base, std::move(locals)});
+        return;
+    }
+    case Op::ret: {
+        const auto value = pop();
+        stack_.resize(frame.base);
+        frames_.pop_back();
+        if (done()) result_ = value; else stack_.push_back(value);
+        return;
+    }
+    default: break;
+    }
+    const auto b = pop(), a = pop();
+    Word result{};
+    switch (inst.op) {
+    case Op::add: result = std::bit_cast<Word>(std::uint64_t(a) + std::uint64_t(b)); break;
+    case Op::sub: result = std::bit_cast<Word>(std::uint64_t(a) - std::uint64_t(b)); break;
+    case Op::mul: result = std::bit_cast<Word>(std::uint64_t(a) * std::uint64_t(b)); break;
+    case Op::div:
+        if (!b || (a == std::numeric_limits<Word>::min() && b == -1))
+            throw Error("integer division out of range");
+        result = a / b;
+        break;
+    case Op::lt: result = a < b; break;
+    case Op::eq: result = a == b; break;
+    default: throw Error("invalid opcode");
+    }
+    stack_.push_back(result);
+}
+Word Machine::run() { while (!done()) step(); return result_; }
+Word Machine::result() const {
+    if (!done()) throw Error("execution still in progress");
+    return result_;
+}
 }
