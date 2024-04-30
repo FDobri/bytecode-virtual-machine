@@ -325,4 +325,16 @@ Word Machine::result() const {
     if (!done()) throw Error("execution still in progress");
     return result_;
 }
+void Machine::inspect(std::ostream& out) const {
+    if (done()) { out << "result: " << result_ << '\n'; return; }
+    const auto& frame = frames_.back();
+    const auto& fn = program_.functions[frame.function];
+    out << fn.name << " ip=" << frame.ip << " frames=" << frames_.size() << "  ";
+    print(fn.code.at(frame.ip), out);
+    out << "locals:";
+    for (auto value : frame.locals) out << ' ' << value;
+    out << "\nstack:";
+    for (auto i = frame.base; i < stack_.size(); ++i) out << ' ' << stack_[i];
+    out << '\n';
+}
 }
