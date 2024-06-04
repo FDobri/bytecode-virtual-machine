@@ -12,3 +12,7 @@ TEST(Vm, RunsFunctionsWithLexicalScopes) {
     EXPECT_NE(state.str().find("stack: 5"), std::string::npos);
     EXPECT_EQ(vm.run(), 120);
 }
+TEST(Vm, BoundsRunawayExecution) {
+    script::Machine vm(script::compile("fn main(){ while 1 { } }"), 50);
+    EXPECT_THROW(vm.run(), script::Error);
+}
