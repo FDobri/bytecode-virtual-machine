@@ -16,3 +16,8 @@ TEST(Vm, BoundsRunawayExecution) {
     script::Machine vm(script::compile("fn main(){ while 1 { } }"), 50);
     EXPECT_THROW(vm.run(), script::Error);
 }
+TEST(Vm, DivisionAndCallErrors) {
+    EXPECT_THROW((void)script::compile("fn main(){ return missing(1); }"), script::Error);
+    script::Machine vm(script::compile("fn main(){ return 7/0; }"));
+    EXPECT_THROW(vm.run(), script::Error);
+}
