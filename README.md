@@ -10,3 +10,5 @@ ctest --test-dir build -C Release --output-on-failure
 ./build/game_vm disasm examples/wave.gs
 ./build/game_vm debug examples/damage.gs
 ```
+
+On multi-config builds use `build/Release/`. The debugger's `s` command executes one opcode. Use `p` to inspect the current instruction, locals and operand stack or `c` to run to completion.
