@@ -24,3 +24,5 @@ mkdir -p build-fuzz/corpus
 cp examples/*.gs build-fuzz/corpus/
 ./build-fuzz/vm_fuzz -seed=2025 -runs=20000 build-fuzz/corpus
 ```
+
+The unit and gameplay tests passed in MSVC 19.44 x64 Release. The example scripts seeded a 20,000-run Clang 18.1.3 fuzz session on Ubuntu 24.04 without a crash, using ASan/UBSan with leak detection disabled for WSL 1.
